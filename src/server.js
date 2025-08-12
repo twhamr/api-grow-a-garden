@@ -6,8 +6,10 @@ const WebSocket = require('ws');
 
 
 // Initialize Express API
+const args = process.argv.slice(2); // ["--port=3000"]
+const portArg = args.find(arg => arg.startsWith('--port='));
+const port = portArg ? portArg.split('=')[1] : 11560; // default 11560
 const app = express();
-const port = 11560;
 
 
 // Function: initialize WebSocket parameters and connection
@@ -119,7 +121,7 @@ function createWebSocket(url, protocols = null, options = {}) {
     };
 }
 
-// Function: calculate elapsed time since last message
+// Function: calculate elapsed time since last message  => Used for debug in console
 let lastMessageTime = null;
 
 function calcElapsedTime() {
