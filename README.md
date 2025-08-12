@@ -28,7 +28,7 @@ If you need to use a different port, use this command in place of Installation s
 - ```npm start -- --port=YOUR_PORT```
 
 ## Routes
-There are 8 routes within the API:
+There are 7 routes within the API:
 
 #### Status Check
 ```/api/v1```
@@ -57,7 +57,3 @@ This will return the current cosmetic stock.
 #### Events
 ```/api/v1/events```
 This will return the current events taking place within the game.
-
-#### Weather
-```/api/v1/weather```
-This will return the current weather condition within the game.
