@@ -168,47 +168,49 @@ ws.onError((error) => {
 
 
 // API routes
-app.get('/', (req, res) => {
+const apiVersion = 1    // used in routes
+
+app.get(`/api/v${apiVersion}`, (req, res) => {
     res.json({
         status: 200
     });
 });
 
-app.get('/api/all', (req, res) => {
+app.get(`/api/v${apiVersion}/all`, (req, res) => {
     res.json({ status: 200, data: allData.data});
 });
 
-app.get('/api/seeds', (req, res) => {
+app.get(`/api/v${apiVersion}/seeds`, (req, res) => {
     const seeds = allData.data.seeds;
 
     res.json({ status: 200, seeds: seeds});
 });
 
-app.get('/api/gear', (req, res) => {
+app.get(`/api/v${apiVersion}/gear`, (req, res) => {
     const gear = allData.data.gear;
 
     res.json({ status: 200, gear: gear});
 });
 
-app.get('/api/eggs', (req, res) => {
+app.get(`/api/v${apiVersion}/eggs`, (req, res) => {
     const eggs = allData.data.eggs;
 
     res.json({ status: 200, eggs: eggs});
 });
 
-app.get('/api/cosmetics', (req, res) => {
+app.get(`/api/v${apiVersion}/cosmetics`, (req, res) => {
     const cosmetics = allData.data.cosmetics;
 
     res.json({ status: 200, cosmetics: cosmetics});
 });
 
-app.get('/api/events', (req, res) => {
+app.get(`/api/v${apiVersion}/events`, (req, res) => {
     const events = allData.data.events;
 
     res.json({ status: 200, events: events});
 });
 
-app.get('/api/weather', (req, res) => {
+app.get(`/api/v${apiVersion}/weather`, (req, res) => {
     const weather = allData.data.weather;
 
     res.json({ status: 200, weather: weather});
