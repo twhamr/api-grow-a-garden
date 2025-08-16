@@ -2,7 +2,10 @@
 // Express API using NodeJS for Grow a Garden
 
 const express = require('express');
-const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const createWebSocket = require('./initWebSocket');
+const updateDB = require('./initFruitDB');
 
 
 // Initialize Express API
@@ -12,249 +15,98 @@ const port = portArg ? portArg.split('=')[1] : 11560; // default 11560
 const app = express();
 
 
-let cachedStockData = null;
-let lastFetchTime = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// Initialize WebSocket connection
+const url = 'wss://ws.growagardenpro.com/'
+const ws = createWebSocket(url, {
+    reconnectInterval: 5000,
+    maxRetries: Infinity,
+    heartbeatInterval: 10000,
+    heartbeatTimeout: 4000,
+    pingMessage: '__ping__',
+    expectPong: false   // only enable if your server echos back ping
+});
 
-function fetchStocks() {
-    const options = {
-        method: "GET",
-        hostname: "growagarden.gg",
-        port: null,
-        path: "/api/stock",
-        headers: {
-            accept: "*/*",
-            "accept-language": "en-US,en;q=0.9",
-            "content-type": "application/json",
-            priority: "u=1, i",
-            referer: "https://growagarden.gg/stocks",
-            "trpc-accept": "application/json",
-            "x-trpc-source": "gag"
-        }
-    };
+ws.onOpen(() => {
+    console.log(`✅ WebSocket connection success! | url: ${url}`);
+});
 
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, (res) => {
-            const chunks = [];
-            res.on("data", (chunk) => {
-                chunks.push(chunk);
-            });
+// Update cache when there is a message received from the WebSocket
+ws.onMessage((event) => {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdir(dataDir);
 
-            res.on("end", () => {
-                try {
-                    const body = Buffer.concat(chunks);
-                    const parsedData = JSON.parse(body.toString());
-                    resolve(parsedData);
-                } catch (err) {
-                    reject(err);
-                }
-            });
-        });
-
-        req.on("error", (e) => {
-            reject(e);
-        });
-
-        req.end();
-    });
-}
-
-function formatItems(items, imageData, isLastSeen = false) {
-    if (!Array.isArray(items) || items.length === 0) return [];
-
-    return items.map(item => {
-        const image = imageData?.[item.name] || null;
-        const baseItem = {
-            name: item?.name || "Unknown",
-            ...(image && { image })
-        };
-
-        if (isLastSeen) {
-            return {
-                ...baseItem,
-                emoji: item?.emoji || "❓",
-                seen: item?.seen ?? null,
-            };
-        } else {
-            return {
-                ...baseItem,
-                value: item?.value ?? null,
-            };
-        }
-    });
-}
-
-function formatStocks(stocks) {
-    const imageData = stocks.imageData || {};
-
-    return {
-        easterStock: formatItems(stocks.easterStock, imageData),
-        gearStock: formatItems(stocks.gearStock, imageData),
-        eventStock: formatItems(stocks.eventStock, imageData),
-        eggStock: formatItems(stocks.eggStock, imageData),
-        nightStock: formatItems(stocks.nightStock, imageData),
-        honeyStock: formatItems(stocks.honeyStock, imageData),
-        cosmeticsStock: formatItems(stocks.cosmeticsStock, imageData),
-        seedsStock: formatItems(stocks.seedsStock, imageData),
-
-        lastSeen: {
-            Seeds: formatItems(stocks.lastSeen?.Seeds, imageData, true),
-            Gears: formatItems(stocks.lastSeen?.Gears, imageData, true),
-            Weather: formatItems(stocks.lastSeen?.Weather, imageData, true),
-            Eggs: formatItems(stocks.lastSeen?.Eggs, imageData, true),
-            Honey: formatItems(stocks.lastSeen?.Honey, imageData, true)
-        },
-
-        restockTimers: stocks.restockTimers || {},
-    };
-}
-
-async function fetchStockData() {
+    const cacheName = 'stockCache.json';
+    const cachePath = path.join(dataDir, cacheName);
     try {
-        const data = await fetchStocks();
+        let response = JSON.parse(event.data);
+        let cacheData = JSON.stringify(response, null, 2);
+        fs.writeFile(cachePath, cacheData, (error) => {
+            if (error) throw error;
 
-        const timestamp = Date.now();
-        if (cachedStockData && (timestamp - lastFetchTime < CACHE_DURATION)) {
-            return cachedStockData;
-        }
-
-        if (!data) {
-            return null;
-        }
-            
-        cachedStockData = data;
-        lastFetchTime = timestamp;
-
-        return formatStocks(data);
-    } catch (err) {
-        console.error("Error fetching stock data:", err);
-        return null;
+            console.log(`💬 WebSocket message received, storing data to ${cacheName}`);
+        })
+    } catch (error) {
+        console.error(`❌ Error writing data to ${cacheName}: ${error}`);
     }
-}
+});
 
-let lastMessageTime = null;
+ws.onClose(() => {
+    console.warn('⚠️ WebSocket closed. Reconnecting...');
+});
 
-function calcElapsedTime() {
-    const now = Date.now();
-
-    if (lastMessageTime !== null) {
-        const elapsedTime = now - lastMessageTime; // difference in ms
-        return elapsedTime;
-    }
-
-    lastMessageTime = now;
-
-    return lastMessageTime;
-}
+ws.onError((error) => {
+    console.error(`❌ WebSocket error: ${error}`);
+});
 
 
-// API routes
 const apiVersion = 1    // used in routes
 
-app.get(`/api/v${apiVersion}`, (req, res) => {
+app.get(`/api/v${apiVersion}/status`, (req, res) => {
     res.json({
-        status: 200
+        status: 200,
+        timestamp: Date.now().toString()
     });
 });
 
-app.get(`/api/v${apiVersion}/all`, async (req, res) => {
-    try {
-        const stockData = await fetchStockData();
-        
-        if (!stockData) {
-            return res.status(500).json({ status: 500, error: "Failed to fetch stock data" });
-        }
-            
-        res.json({ status: 200, stock: stockData });
-    } catch (error) {
-        res.status(500).json({ status: 500, error: "Error fetching stock data" });
+const routesDir = path.join(__dirname, 'routes');
+if (!fs.existsSync(routesDir)) fs.mkdirSync(routesDir);
+
+let loadCount = 0;
+fs.readdir(routesDir, (error, files) => {
+    if (error) {
+        console.error(`❌ Failed to read routes directory: ${error}`);
+        return;
     }
-});
 
-app.get(`/api/v${apiVersion}/seeds`, async (req, res) => {
-    try {
-        const stockData = await fetchStockData();
-        
-        if (!stockData) {
-            return res.status(500).json({ status: 500, error: "Failed to fetch stock data" });
+    files.forEach((file) => {
+        if (file.endsWith('.js')) {
+            const routePath = path.join(routesDir, file);
+
+            try {
+                const routeModule = require(routePath);
+
+                if (typeof routeModule.initRoute === 'function') {
+                    routeModule.initRoute(app, apiVersion);
+                    console.log(`✅ Added module: ${file}`);
+                    loadCount++;
+                } else {
+                    console.warn(`⚠️ No initRoute() export: ${file}`);
+                }
+            } catch (error) {
+                console.error(`❌ Error in ${file}: ${error}`);
+            }
         }
-        
-        res.json({ status: 200, stock: stockData.seedsStock });
-    } catch (error) {
-        res.status(500).json({ status: 500, error: "Error fetching stock data" });
-    }
-});
+    });
 
-app.get(`/api/v${apiVersion}/gear`, async (req, res) => {
-    try {
-        const stockData = await fetchStockData();
-        
-        if (!stockData) {
-            return res.status(500).json({ status: 500, error: "Failed to fetch stock data" });
-        }
-            
-        res.json({ status: 200, stock: stockData.gearStock });
-    } catch (error) {
-        res.status(500).json({ status: 500, error: "Error fetching stock data" });
-    }
-});
+    updateDB()
 
-app.get(`/api/v${apiVersion}/eggs`, async (req, res) => {
-    try {
-        const stockData = await fetchStockData();
-        
-        if (!stockData) {
-            return res.status(500).json({ status: 500, error: "Failed to fetch stock data" });
-        }
-            
-        res.json({ status: 200, stock: stockData.eggStock });
-    } catch (error) {
-        res.status(500).json({ status: 500, error: "Error fetching stock data" });
-    }
-});
+    const updateDBInterval = setInterval(() => {
+        updateDB();
+    }, 86400000);
 
-app.get(`/api/v${apiVersion}/cosmetics`, async (req, res) => {
-    try {
-        const stockData = await fetchStockData();
-        
-        if (!stockData) {
-            return res.status(500).json({ status: 500, error: "Failed to fetch stock data" });
-        }
-            
-        res.json({ status: 200, stock: stockData.cosmeticsStock });
-    } catch (error) {
-        res.status(500).json({ status: 500, error: "Error fetching stock data" });
-    }
-});
-
-app.get(`/api/v${apiVersion}/events`, async (req, res) => {
-    try {
-        const stockData = await fetchStockData();
-        
-        if (!stockData) {
-            return res.status(500).json({ status: 500, error: "Failed to fetch stock data" });
-        }
-            
-        res.json({ status: 200, stock: stockData.eventStock });
-    } catch (error) {
-        res.status(500).json({ status: 500, error: "Error fetching stock data" });
-    }
-});
-
-// app.get(`/api/v${apiVersion}/weather`, async (req, res) => {
-//     try {
-//         const stockData = await fetchStockData();
-        
-//         if (!stockData) {
-//             return res.status(500).json({ status: 500, error: "Failed to fetch stock data" });
-//         }
-            
-//         res.json({ status: 200, stock: stockData.Weather });
-//     } catch (error) {
-//         res.status(500).json({ status: 500, error: "Error fetching stock data" });
-//     }
-// });
-
-app.listen(port, () => {
-    console.log(`Grow a Garden API is online and listening on port: ${port}`);
+    app.listen(port, () => {
+        console.log(`🤖 API is live on http://localhost:${port}`);
+        console.log(`❓ Status check available at /api/v${apiVersion}/status`);
+        console.log('©️ Grow-A-Garden API developed by twhamr | https://github.com/twhamr');
+    });
 });

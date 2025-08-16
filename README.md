@@ -28,10 +28,10 @@ If you need to use a different port, use this command in place of Installation s
 - ```npm start -- --port=YOUR_PORT```
 
 ## Routes
-There are 7 routes within the API:
+There are 9 routes within the API:
 
 #### Status Check
-```/api/v1```  
+```/api/v1/status```  
 This is just a simple status check to make sure the API is online and responsive.
 
 #### All Data
@@ -57,3 +57,14 @@ This will return the current cosmetic stock.
 #### Events
 ```/api/v1/events```  
 This will return the current events taking place within the game.
+
+#### Weather
+```/api/v1/weather```  
+This will return the current weather conditions within the game.
+
+#### Fruits
+```/api/v1/fruits```  
+This will return a database of all fruits within the game.  
+There are optional query parameters that can be used:  
+- ```name=FRUIT_NAME```
+- ```rarity=FRUIT_RARITY```
