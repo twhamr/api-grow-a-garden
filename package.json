@@ -1,6 +1,6 @@
 {
   "name": "api-grow-a-garden",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Express API using NodeJS for Grow a Garden",
   "main": "src/server.js",
   "scripts": {

@@ -15,6 +15,13 @@ const port = portArg ? portArg.split('=')[1] : 11560; // default 11560
 const app = express();
 
 
+// Create data directory if it doesn't exist
+const dataDir = path.join(__dirname, 'data');
+function createDataDir() {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+}
+
+
 // Initialize WebSocket connection
 const url = 'wss://ws.growagardenpro.com/'
 const ws = createWebSocket(url, {
@@ -32,9 +39,6 @@ ws.onOpen(() => {
 
 // Update cache when there is a message received from the WebSocket
 ws.onMessage((event) => {
-    const dataDir = path.join(__dirname, 'data');
-    if (!fs.existsSync(dataDir)) fs.mkdir(dataDir);
-
     const cacheName = 'stockCache.json';
     const cachePath = path.join(dataDir, cacheName);
     try {
@@ -69,10 +73,11 @@ app.get(`/api/v${apiVersion}/status`, (req, res) => {
 });
 
 const routesDir = path.join(__dirname, 'routes');
-if (!fs.existsSync(routesDir)) fs.mkdirSync(routesDir);
 
 let loadCount = 0;
 fs.readdir(routesDir, (error, files) => {
+    createDataDir();
+
     if (error) {
         console.error(`❌ Failed to read routes directory: ${error}`);
         return;
